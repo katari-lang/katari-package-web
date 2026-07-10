@@ -1,0 +1,12 @@
+[package]
+name = "web"
+version = "0.1.0"
+description = "Fetch a web page as a Katari tool over http.fetch — pure Katari, no sidecar, no key."
+
+[runtime]
+url = "http://localhost:3000"
+
+[dependencies]
+registry = "https://raw.githubusercontent.com/katari-lang/katari-registry/main"
+snapshot = "staging"
+packages = []
