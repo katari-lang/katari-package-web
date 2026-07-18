@@ -5,7 +5,7 @@
 enough to feed back to the model. A non-2xx status is reported as text (the model can react); only a
 request that never completes throws (`http.fetch_error`)."
 agent fetch_page(url: string) -> string {
-  let response = http.fetch(url = url, method = "GET", headers = record.empty(), body = "")
+  let response = http.fetch(url = url, method = "GET", headers = record.empty(), body = http.text(content = ""))
   if (response.status >= 200 && response.status < 300) {
     truncate(text = response.body)
   } else {
