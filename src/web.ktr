@@ -1,24 +1,26 @@
 // A self-contained page-fetch tool — pure Katari over the prelude's `http.fetch`, no capability
 // needed (it reads public pages). An app just adds `web.fetch_page` to its tool list.
 
-@"Tool: fetch a web page over HTTP GET and return its body text, truncated so the result stays small
-enough to feed back to the model. A non-2xx status is reported as text (the model can react); only a
-request that never completes throws (`http.fetch_error`)."
-agent fetch_page(url: string) -> string {
+@"Tool: fetch a web page over HTTP GET and return its body text, truncated to @max_characters@ code
+points so the result stays small enough to feed back to the model (the default keeps roughly a page).
+A non-2xx status is reported as text (the model can react); only a request that never completes
+throws (`http.fetch_error`)."
+agent fetch_page(
+  @"The page URL." url: string,
+  @"The truncation budget, in code points." max_characters: integer ?= 16000,
+) -> string {
   let response = http.fetch(url = url, method = "GET", headers = record.empty(), body = http.text(content = ""))
   if (response.status >= 200 && response.status < 300) {
-    truncate(text = response.body)
+    truncate(text = response.body, max_characters = max_characters)
   } else {
-    let status = string.to_string(value = response.status)
-    f"(fetch failed with status ${status})"
+    f"(fetch failed with status ${response.status})"
   }
 }
 
-// Keep roughly a page of content: enough for the model to read an article, small enough not to blow
-// the context window when several pages are fetched in one turn.
-agent truncate(text: string) -> string {
-  if (string.length(value = text) > 16000) {
-    let head = string.slice(value = text, start = 0, end = 16000)
+@"The first @max_characters@ code points of @text@, with a truncation note when anything was cut."
+agent truncate(text: string, max_characters: integer ?= 16000) -> string {
+  if (string.length(value = text) > max_characters) {
+    let head = string.slice(value = text, start = 0, end = max_characters)
     f"${head}\n(...truncated)"
   } else {
     text
