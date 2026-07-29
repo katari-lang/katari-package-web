@@ -1,6 +1,6 @@
 [package]
 name = "web"
-version = "0.1.2"
+version = "0.2.0"
 description = "Fetch a web page as a Katari tool over http.fetch — pure Katari, no sidecar, no key."
 
 [runtime]
