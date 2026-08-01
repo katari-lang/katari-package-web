@@ -1,42 +1,27 @@
-// A self-contained page-fetch tool — pure Katari over the prelude's `http.fetch`, no capability
-// needed (it reads public pages). An app just adds `web.fetch_page` to its tool list.
+// Page fetch over the prelude's `http.fetch`. No capability: it reads public pages.
 //
-// A non-2xx is a typed THROW (`http.api_failure`, drawn by the stdlib's `http.classify_status`), not a
-// sentence in the returned text. Reporting a failure as the RESULT makes a tool that SUCCEEDS on every
-// 404: the AI loop shows the model the text either way, but the app's `tool_events` record a
-// `tool_succeeded` for a page nobody read, and the one channel that exists to make swallowed failures
-// visible goes blind. Absorbing a tool's throw is the LOOP's job — it hands the model the error and
-// reports `tool_failed` to the app — so throwing is what keeps both readings true at once.
+// A non-2xx throws rather than returning the error as text, so the AI loop reports `tool_failed`
+// instead of a `tool_succeeded` for a page nobody read.
 
-@"Tool: fetch a web page over HTTP GET and return its body text, truncated to @max_characters@ code
-points so the result stays small enough to feed back to the model (the default keeps roughly a page).
-A cut page SAYS it was cut, and by how much. A non-2xx status throws `http.api_failure` — the status
-classified: `http.auth_error` for a 401/403, `http.api_error` for everything else, both carrying the
-status and the server's own body. A request that never completes throws `http.fetch_error`."
+@"Tool: fetch a web page over HTTP GET and return its body text, cut to @max_characters@ code points
+(the budget covers the whole answer, and a cut page says how long the page really was). A non-2xx
+status throws `http.api_failure` — `http.auth_error` for 401 / 403, `http.api_error` otherwise, each
+carrying the status and the server's own body; a request that never completes throws
+`http.fetch_error`."
 agent fetch_page(
   @"The page URL." url: string,
-  @"The truncation budget, in code points." max_characters: integer ?= 16000,
+  @"The budget for the whole answer, in code points." max_characters: integer ?= 16000,
 ) -> string {
-  let response = http.fetch(url = url, method = "GET", headers = record.empty(), body = http.text(content = ""))
+  let response = http.fetch(url = url)
   if (response.status >= 200 && response.status < 300) {
-    truncate(text = response.body, max_characters = max_characters)
+    // `string.fit` pays for the marker out of the budget, so the marker names the page's real length
+    // rather than how much of it is shown.
+    string.fit(
+      value = response.body,
+      cap = max_characters,
+      marker = f"\n[… TRUNCATED: this is the opening of a ${string.length(value = response.body)}-character page, cut to a ${max_characters}-character budget; the rest was not fetched. Treat this as a fragment, and say so rather than answering as if you had the whole page.]",
+    )
   } else {
-    // The url is the context a human needs (WHICH page failed); the body is the server's own diagnosis,
-    // kept verbatim so nothing edits it to make room for a prefix.
     prelude.throw(error = http.classify_status(status = response.status, context = f"web.fetch_page ${url}", message = response.body))
-  }
-}
-
-@"The first @max_characters@ code points of @text@, with an explicit marker when anything was cut: how
-much is shown, how much there was, and that the rest is missing. The marker is not decoration — a model
-that cannot tell it is holding a FRAGMENT answers confidently from the fragment, which is why
-`ai.file_text_note` and `memory`'s excerpts say the same thing in the same shape."
-agent truncate(text: string, max_characters: integer ?= 16000) -> string {
-  let length = string.length(value = text)
-  if (length > max_characters) {
-    let head = string.slice(value = text, start = 0, end = max_characters)
-    f"${head}\n[… TRUNCATED: the first ${max_characters} of ${length} characters of this page are shown; the rest was not fetched. Treat this as a fragment, and say so rather than answering as if you had the whole page.]"
-  } else {
-    text
   }
 }
